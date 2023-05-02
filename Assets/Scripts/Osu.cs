@@ -13,6 +13,9 @@ public class Osu : MonoBehaviour
     private List<GameObject> platforms = new List<GameObject>();
     private PlayerMovementAdvanced player;
 
+    private float walkSpeed;
+    private float timeMod;
+
 
     // Start is called before the first frame update
     void Start()
@@ -20,10 +23,12 @@ public class Osu : MonoBehaviour
         // Get the player
         player = GameObject.Find("Player").GetComponent<PlayerMovementAdvanced>();
 
-        string filepath = Application.dataPath + "/Songs/1453937 DJ SPIZDIL - Malo Tebya/DJ SPIZDIL - Malo Tebya (SerniGrief) [Extreme].osu";
+        string filepath = Application.dataPath + "/Songs/185250 ALiCE'S EMOTiON - Dark Flight Dreamer/ALiCE'S EMOTiON - Dark Flight Dreamer (Sakaue Nachi) [Dreamer].osu";
         string fileContents = File.ReadAllText(filepath);
         beatmap = new Beatmap(fileContents);
         Debug.Log(beatmap.ToString());
+        walkSpeed = player.walkSpeed;
+        timeMod = walkSpeed / 1000.0f;
         GeneratePlatforms();
 
         audioSource = GetComponent<AudioSource>();
@@ -32,7 +37,7 @@ public class Osu : MonoBehaviour
         // // Set the audio source's clip to the audio clip
         // audioSource.clip = audioClip;
         // // Set the audio source's volume
-        audioSource.volume = 0.5f;
+        audioSource.volume = 0.25f;
         // // Play the audio source
         // audioSource.Play();
 
@@ -53,7 +58,6 @@ public class Osu : MonoBehaviour
             if (!audioSource.isPlaying)
             {
                 audioSource.Play();
-                audioSource.time = beatmap.HitObjects()[0].Time() / 1000.0f;
             }
 
             // If the audio source is playing, set the player's position to the audio source's time
@@ -61,7 +65,59 @@ public class Osu : MonoBehaviour
             {
                 if (player != null)
                 {
-                    player.transform.position = new Vector3(0, 10, audioSource.time * player.walkSpeed);
+                    // Get the current time
+                    float time = audioSource.time;
+                    int index = 0;
+                    // Find the platform that is closest to the current time
+                    for (index = 0; index < platforms.Count - 1 && platforms[index + 1].transform.position.z / walkSpeed <= time; index++) { }
+
+                    float ypos = 0;
+                    if (index < platforms.Count - 1 && time > platforms[0].transform.position.z / timeMod / 1000.0f)
+                    {
+                        GameObject currentPlatform = platforms[index];
+                        GameObject nextPlatform = platforms[index + 1];
+
+                        Vector3 startPos = currentPlatform.transform.position;
+                        Vector3 endPos = nextPlatform.transform.position;
+
+                        if (nextPlatform.layer == 10)
+                        {
+                            Vector3 bounds = nextPlatform.GetComponent<MeshFilter>().mesh.bounds.size;
+                            endPos.z -= bounds.z / 2;
+                        }
+                        if (currentPlatform.layer == 10)
+                        {
+                            Vector3 bounds = currentPlatform.GetComponent<MeshFilter>().mesh.bounds.size;
+                            startPos.z += bounds.z / 2;
+                        }
+
+                        // Debug.Log($"{player.transform.position.z} ? {currentPlatform.z} - {nextPlatform.z}");
+                        float distance = endPos.z - startPos.z;
+                        float pz = player.transform.position.z - startPos.z;
+                        if (pz < 0 || pz > distance)
+                        {
+                            ypos = 0;
+                        }
+                        else
+                        {
+                            float half = distance / 2;
+                            float grav = -0.2f;
+                            float halfy = 0.5f * grav * (half * half - distance * half);
+                            if (halfy > 10)
+                            {
+                                grav = 10 / (0.5f * (half * half - distance * half));
+                            }
+                            ypos = 0.5f * grav * (pz * pz - distance * pz);
+                        }
+
+                    }
+
+                    Transform cam = GameObject.Find("PlayerCam").GetComponent<PlayerCam>().orientation;
+                    Debug.Log(cam.forward);
+                    float xpos = player.transform.position.x + cam.forward.x * walkSpeed * Time.deltaTime;
+                    float zpos = time * walkSpeed;
+                    player.transform.position = new Vector3(xpos, ypos, zpos);
+
                 }
             }
         }
@@ -69,12 +125,11 @@ public class Osu : MonoBehaviour
 
     void GeneratePlatforms()
     {
-        float walkSpeed = player.walkSpeed;
-        float timeMod = walkSpeed / 1000.0f;
+        bool wallLeft = false;
         foreach (HitObject hitObject in beatmap.HitObjects())
         {
             // Debug.Log(hitObject.ToString());
-            float xpos = Random.Range(-10, 10);
+            float xpos = Mathf.Sin(hitObject.Time() / 100.0f);
             if (hitObject.Type() == HitObjectType.CIRCLE)
             {
                 // Create a platform
@@ -85,12 +140,12 @@ public class Osu : MonoBehaviour
                 // Adjust the length of the platform to the bounds
                 length /= bounds.size.z;
                 // Set the platform's scale
-                platform.transform.localScale = new Vector3(1, length, 1);
+                platform.transform.localScale = new Vector3(length, length, 1);
                 // Set the platform layer
                 platform.layer = 10;
                 // Set the position to the time
-                platform.transform.position = new Vector3(xpos, 0, hitObject.Time() * timeMod);
-                // platforms.Add(platform);
+                platform.transform.position = new Vector3(xpos, -bounds.size.z, hitObject.Time() * timeMod);
+                platforms.Add(platform);
             }
             else
             {
@@ -107,8 +162,17 @@ public class Osu : MonoBehaviour
                 wall.layer = 9;
                 wall.transform.rotation = Quaternion.Euler(0, 90, 0);
                 // Set the position to the time
-                wall.transform.position = new Vector3(xpos, 0, hitObject.Time() * timeMod);
+                if (wallLeft)
+                {
+                    xpos = 2.5f;
+                }
+                else
+                {
+                    xpos = -2.5f;
+                }
+                wall.transform.position = new Vector3(xpos, bounds.size.y / 4, hitObject.Time() * timeMod);
                 platforms.Add(wall);
+                wallLeft = !wallLeft;
             }
         }
     }

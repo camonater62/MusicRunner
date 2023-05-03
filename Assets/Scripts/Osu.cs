@@ -16,6 +16,8 @@ public class Osu : MonoBehaviour
     private float walkSpeed;
     private float timeMod;
 
+    [SerializeField] TextAsset mapFile;
+
 
     // Start is called before the first frame update
     void Start()
@@ -23,9 +25,9 @@ public class Osu : MonoBehaviour
         // Get the player
         player = GameObject.Find("Player").GetComponent<PlayerMovementAdvanced>();
 
-        string filepath = Application.dataPath + "/Songs/185250 ALiCE'S EMOTiON - Dark Flight Dreamer/ALiCE'S EMOTiON - Dark Flight Dreamer (Sakaue Nachi) [Dreamer].osu";
-        string fileContents = File.ReadAllText(filepath);
-        beatmap = new Beatmap(fileContents);
+        // string filepath = Application.dataPath + "/Songs/1743864 The RAH Band - Messages From The Stars (Sped up & Cut Ver)/The RAH Band - Messages From The Stars (Sped up & Cut Ver.) (rpoj) [Another Galaxy].osu";
+        // string fileContents = File.ReadAllText(filepath);
+        beatmap = new Beatmap(mapFile.text);
         Debug.Log(beatmap.ToString());
         walkSpeed = player.walkSpeed;
         timeMod = walkSpeed / 1000.0f;
@@ -37,7 +39,7 @@ public class Osu : MonoBehaviour
         // // Set the audio source's clip to the audio clip
         // audioSource.clip = audioClip;
         // // Set the audio source's volume
-        audioSource.volume = 0.25f;
+        audioSource.volume = 0.125f;
         // // Play the audio source
         // audioSource.Play();
 
@@ -68,40 +70,64 @@ public class Osu : MonoBehaviour
                     // Get the current time
                     float time = audioSource.time;
                     int index = 0;
-                    // Find the platform that is closest to the current time
-                    for (index = 0; index < platforms.Count - 1 && platforms[index + 1].transform.position.z / walkSpeed <= time; index++) { }
+                    // Find the first platform that is after the current time
+                    while (index < beatmap.HitObjects().Count - 1 && beatmap.HitObjects()[index + 1].Time() <= 1000 * time)
+                    {
+                        index++;
+                    }
 
                     float ypos = 0;
-                    if (index < platforms.Count - 1 && time > platforms[0].transform.position.z / timeMod / 1000.0f)
+                    if (index < beatmap.HitObjects().Count - 1 && 1000 * time > beatmap.HitObjects()[0].Time() / 1000)
                     {
-                        GameObject currentPlatform = platforms[index];
-                        GameObject nextPlatform = platforms[index + 1];
+                        float currentSZ = beatmap.HitObjects()[index].Time() * timeMod;
+                        float nextSZ = beatmap.HitObjects()[index + 1].Time() * timeMod;
+                        float currentEZ = currentSZ + beatmap.HitObjects()[index].Length() * timeMod;
+                        float nextEZ = nextSZ + beatmap.HitObjects()[index + 1].Length() * timeMod;
+                        float currentZ = (currentEZ + currentSZ) / 2;
+                        float nextZ = (nextEZ + nextSZ) / 2;
+
+                        GameObject currentPlatform = platforms[0];
+                        GameObject nextPlatform = platforms[0];
+
+                        // Find the current platform
+                        for (int i = 0; i < platforms.Count; i++)
+                        {
+                            // Debug.Log($"{platforms[i].transform.position.z} ? {currentSZ}");
+                            if (Mathf.Abs(platforms[i].transform.position.z - currentZ) < 0.01f)
+                            {
+                                Debug.Log("Found current platform");
+                                currentPlatform = platforms[i];
+                            }
+                            else if (Mathf.Abs(platforms[i].transform.position.z - nextZ) < 0.01f)
+                            {
+                                Debug.Log("Found next platform");
+                                nextPlatform = platforms[i];
+                                break;
+                            }
+                        }
 
                         Vector3 startPos = currentPlatform.transform.position;
                         Vector3 endPos = nextPlatform.transform.position;
 
-                        if (nextPlatform.layer == 10)
+                        if (nextPlatform.layer == 9)
                         {
-                            Vector3 bounds = nextPlatform.GetComponent<MeshFilter>().mesh.bounds.size;
-                            endPos.z -= bounds.z / 2;
+                            endPos.z = beatmap.HitObjects()[index + 1].Time() * timeMod;
                         }
-                        if (currentPlatform.layer == 10)
+                        if (currentPlatform.layer == 9)
                         {
-                            Vector3 bounds = currentPlatform.GetComponent<MeshFilter>().mesh.bounds.size;
-                            startPos.z += bounds.z / 2;
+                            startPos.z = (beatmap.HitObjects()[index].Time() + beatmap.HitObjects()[index].Length()) * timeMod;
                         }
 
+
+                        Debug.Log($"{player.transform.position.z} | {startPos.z} | {endPos.z}");
                         // Debug.Log($"{player.transform.position.z} ? {currentPlatform.z} - {nextPlatform.z}");
                         float distance = endPos.z - startPos.z;
                         float pz = player.transform.position.z - startPos.z;
-                        if (pz < 0 || pz > distance)
-                        {
-                            ypos = 0;
-                        }
-                        else
+                        Debug.Log($"{pz} <? {distance}");
+                        if (pz > 0 && pz < distance)
                         {
                             float half = distance / 2;
-                            float grav = -0.2f;
+                            float grav = -0.25f;
                             float halfy = 0.5f * grav * (half * half - distance * half);
                             if (halfy > 10)
                             {
@@ -113,7 +139,6 @@ public class Osu : MonoBehaviour
                     }
 
                     Transform cam = GameObject.Find("PlayerCam").GetComponent<PlayerCam>().orientation;
-                    Debug.Log(cam.forward);
                     float xpos = player.transform.position.x + cam.forward.x * walkSpeed * Time.deltaTime;
                     float zpos = time * walkSpeed;
                     player.transform.position = new Vector3(xpos, ypos, zpos);
@@ -123,6 +148,83 @@ public class Osu : MonoBehaviour
         }
     }
 
+
+    GameObject ConstructPlatform(float xpos, float time)
+    {
+        // Create a platform
+        GameObject platform = Instantiate(platformPrefab);
+        float length = 10 * timeMod;
+        // Get the bounds of the platform
+        Bounds bounds = platform.GetComponent<MeshFilter>().mesh.bounds;
+        // Adjust the length of the platform to the bounds
+        length /= bounds.size.z;
+        // Set the platform's scale
+        platform.transform.localScale = new Vector3(length, length, 1);
+        // Set the platform layer
+        platform.layer = 10;
+        // Set the position to the time
+        platform.transform.position = new Vector3(xpos, -bounds.size.z, time);
+        platforms.Add(platform);
+        // float length = 100 * timeMod;
+        // // Create a platform
+        // GameObject platform = Instantiate(platformPrefab);
+        // // Get the bounds of the platform
+        // Bounds bounds = platform.GetComponent<MeshFilter>().mesh.bounds;
+        // // Adjust the length of the platform to the bounds
+        // length /= bounds.size.z;
+        // // Set the platform's scale
+        // platform.transform.localScale = new Vector3(length, length, 1);
+        // // Set the platform layer
+        // platform.layer = 10;
+        // // Set the position to the time
+        // platform.transform.position = new Vector3(xpos, -bounds.size.z, time);
+        // // Add the platform to the list of platforms
+        // platforms.Add(platform);
+        return platform;
+    }
+
+    GameObject ConstructWall(float length, float xpos, float startTime)
+    {
+        // Create a wall
+        // GameObject wall = Instantiate(wallPrefab);
+        // float length = hitObject.Length() * timeMod;
+        // // Get the bounds of the wall
+        // Bounds bounds = wall.GetComponent<MeshFilter>().mesh.bounds;
+        // // Adjust the length of the wall to the bounds
+        // length /= bounds.size.x;
+        // // Set the wall's scale
+        // wall.transform.localScale = new Vector3(length, 1, 1);
+        // // Set the wall layer
+        // wall.layer = 9;
+        // wall.transform.rotation = Quaternion.Euler(0, 90, 0);
+        // // Set the position to the time
+
+        // wall.transform.position = new Vector3(xpos, bounds.size.y / 4, hitObject.Time() * timeMod + length * bounds.size.x / 2);
+        // platforms.Add(wall);
+        GameObject wall = Instantiate(wallPrefab);
+        // Get the bounds of the platform
+        Bounds bounds = wall.GetComponent<MeshFilter>().mesh.bounds;
+        // Scale length to time
+        // Start Z pos
+        float startZ = startTime * timeMod;
+        // End Z pos
+        float endZ = startZ + length * timeMod;
+        float zpos = (startZ + endZ) / 2;
+        float worldWidth = endZ - startZ;
+        // Debug.Log($"Doth {endZ - startZ} ==  {length}?");
+        // Set the platform's scale
+        wall.transform.localScale = new Vector3(worldWidth / bounds.size.x, 1, 1);
+        // Set the platform layer
+        wall.layer = 9;
+        // Set the platform's rotation
+        wall.transform.rotation = Quaternion.Euler(0, 90, 0);
+
+        // Set the position to the time
+        wall.transform.position = new Vector3(xpos, -bounds.size.y / 4, zpos);
+        // Add the platform to the list of platforms
+        platforms.Add(wall);
+        return wall;
+    }
     void GeneratePlatforms()
     {
         bool wallLeft = false;
@@ -133,46 +235,34 @@ public class Osu : MonoBehaviour
             if (hitObject.Type() == HitObjectType.CIRCLE)
             {
                 // Create a platform
-                GameObject platform = Instantiate(platformPrefab);
-                float length = 10 * timeMod;
-                // Get the bounds of the platform
-                Bounds bounds = platform.GetComponent<MeshFilter>().mesh.bounds;
-                // Adjust the length of the platform to the bounds
-                length /= bounds.size.z;
-                // Set the platform's scale
-                platform.transform.localScale = new Vector3(length, length, 1);
-                // Set the platform layer
-                platform.layer = 10;
-                // Set the position to the time
-                platform.transform.position = new Vector3(xpos, -bounds.size.z, hitObject.Time() * timeMod);
-                platforms.Add(platform);
+                ConstructPlatform(xpos, hitObject.Time() * timeMod);
+
             }
             else
             {
-                // Create a wall
-                GameObject wall = Instantiate(wallPrefab);
-                float length = hitObject.Length() * timeMod;
-                // Get the bounds of the wall
-                Bounds bounds = wall.GetComponent<MeshFilter>().mesh.bounds;
-                // Adjust the length of the wall to the bounds
-                length /= bounds.size.x;
-                // Set the wall's scale
-                wall.transform.localScale = new Vector3(length, 1, 1);
-                // Set the wall layer
-                wall.layer = 9;
-                wall.transform.rotation = Quaternion.Euler(0, 90, 0);
-                // Set the position to the time
-                if (wallLeft)
+                // if (hitObject.Length() < 300)
+                // {
+                //     // Create a platform
+                //     ConstructPlatform(xpos, hitObject.Time() * timeMod);
+                //     // Create a platform at the end
+                //     ConstructPlatform(xpos, (hitObject.Time() + hitObject.Length()) * timeMod);
+                // }
+                // else
                 {
-                    xpos = 2.5f;
+                    // Create a platform
+                    if (wallLeft)
+                    {
+                        xpos = 2.5f;
+                    }
+                    else
+                    {
+                        xpos = -2.5f;
+                    }
+                    wallLeft = !wallLeft;
+                    ConstructWall(hitObject.Length(), xpos, hitObject.Time());
                 }
-                else
-                {
-                    xpos = -2.5f;
-                }
-                wall.transform.position = new Vector3(xpos, bounds.size.y / 4, hitObject.Time() * timeMod);
-                platforms.Add(wall);
-                wallLeft = !wallLeft;
+
+
             }
         }
     }

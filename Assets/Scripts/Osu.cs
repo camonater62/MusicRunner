@@ -17,6 +17,7 @@ public class Osu : MonoBehaviour
     private float timeMod;
 
     [SerializeField] TextAsset mapFile;
+    private GameObject platformParent;
 
 
     // Start is called before the first frame update
@@ -24,25 +25,15 @@ public class Osu : MonoBehaviour
     {
         // Get the player
         player = GameObject.Find("Player").GetComponent<PlayerMovementAdvanced>();
-
-        // string filepath = Application.dataPath + "/Songs/1743864 The RAH Band - Messages From The Stars (Sped up & Cut Ver)/The RAH Band - Messages From The Stars (Sped up & Cut Ver.) (rpoj) [Another Galaxy].osu";
-        // string fileContents = File.ReadAllText(filepath);
         beatmap = new Beatmap(mapFile.text);
         Debug.Log(beatmap.ToString());
         walkSpeed = player.walkSpeed;
         timeMod = walkSpeed / 1000.0f;
+
+        platformParent = new GameObject("Platforms");
         GeneratePlatforms();
 
         audioSource = GetComponent<AudioSource>();
-        // // Create an audio clip from the beatmap's audio filepath
-        // AudioClip audioClip = Resources.Load<AudioClip>(Application.dataPath + "/Songs/1453937 DJ SPIZDIL - Malo Tebya/" + beatmap.AudioFilename());
-        // // Set the audio source's clip to the audio clip
-        // audioSource.clip = audioClip;
-        // // Set the audio source's volume
-        audioSource.volume = 0.125f;
-        // // Play the audio source
-        // audioSource.Play();
-
 
         if (player != null)
         {
@@ -75,74 +66,75 @@ public class Osu : MonoBehaviour
                     {
                         index++;
                     }
-
-                    float ypos = 0;
-                    if (index < beatmap.HitObjects().Count - 1 && 1000 * time > beatmap.HitObjects()[0].Time() / 1000)
+                    if (index < beatmap.HitObjects().Count - 1)
                     {
-                        float currentSZ = beatmap.HitObjects()[index].Time() * timeMod;
-                        float nextSZ = beatmap.HitObjects()[index + 1].Time() * timeMod;
-                        float currentEZ = currentSZ + beatmap.HitObjects()[index].Length() * timeMod;
-                        float nextEZ = nextSZ + beatmap.HitObjects()[index + 1].Length() * timeMod;
-                        float currentZ = (currentEZ + currentSZ) / 2;
-                        float nextZ = (nextEZ + nextSZ) / 2;
+                        float ypos = 0;
 
-                        GameObject currentPlatform = platforms[0];
-                        GameObject nextPlatform = platforms[0];
-
-                        // Find the current platform
-                        for (int i = 0; i < platforms.Count; i++)
+                        if (1000 * time > beatmap.HitObjects()[0].Time() / 1000)
                         {
-                            // Debug.Log($"{platforms[i].transform.position.z} ? {currentSZ}");
-                            if (Mathf.Abs(platforms[i].transform.position.z - currentZ) < 0.01f)
+                            float currentSZ = beatmap.HitObjects()[index].Time() * timeMod;
+                            float nextSZ = beatmap.HitObjects()[index + 1].Time() * timeMod;
+                            float currentEZ = currentSZ + beatmap.HitObjects()[index].Length() * timeMod;
+                            float nextEZ = nextSZ + beatmap.HitObjects()[index + 1].Length() * timeMod;
+                            float currentZ = (currentEZ + currentSZ) / 2;
+                            float nextZ = (nextEZ + nextSZ) / 2;
+
+                            GameObject currentPlatform = platforms[0];
+                            GameObject nextPlatform = platforms[0];
+
+                            // Find the current platform
+                            for (int i = 0; i < platforms.Count; i++)
                             {
-                                Debug.Log("Found current platform");
-                                currentPlatform = platforms[i];
+                                if (Mathf.Abs(platforms[i].transform.position.z - currentZ) < 0.01f)
+                                {
+                                    currentPlatform = platforms[i];
+                                }
+                                else if (Mathf.Abs(platforms[i].transform.position.z - nextZ) < 0.01f)
+                                {
+                                    nextPlatform = platforms[i];
+                                    break;
+                                }
                             }
-                            else if (Mathf.Abs(platforms[i].transform.position.z - nextZ) < 0.01f)
+
+                            Vector3 startPos = currentPlatform.transform.position;
+                            Vector3 endPos = nextPlatform.transform.position;
+
+                            if (nextPlatform.layer == 9)
                             {
-                                Debug.Log("Found next platform");
-                                nextPlatform = platforms[i];
-                                break;
+                                endPos.z = beatmap.HitObjects()[index + 1].Time() * timeMod;
                             }
-                        }
-
-                        Vector3 startPos = currentPlatform.transform.position;
-                        Vector3 endPos = nextPlatform.transform.position;
-
-                        if (nextPlatform.layer == 9)
-                        {
-                            endPos.z = beatmap.HitObjects()[index + 1].Time() * timeMod;
-                        }
-                        if (currentPlatform.layer == 9)
-                        {
-                            startPos.z = (beatmap.HitObjects()[index].Time() + beatmap.HitObjects()[index].Length()) * timeMod;
-                        }
-
-
-                        Debug.Log($"{player.transform.position.z} | {startPos.z} | {endPos.z}");
-                        // Debug.Log($"{player.transform.position.z} ? {currentPlatform.z} - {nextPlatform.z}");
-                        float distance = endPos.z - startPos.z;
-                        float pz = player.transform.position.z - startPos.z;
-                        Debug.Log($"{pz} <? {distance}");
-                        if (pz > 0 && pz < distance)
-                        {
-                            float half = distance / 2;
-                            float grav = -0.25f;
-                            float halfy = 0.5f * grav * (half * half - distance * half);
-                            if (halfy > 10)
+                            if (currentPlatform.layer == 9)
                             {
-                                grav = 10 / (0.5f * (half * half - distance * half));
+                                startPos.z = (beatmap.HitObjects()[index].Time() + beatmap.HitObjects()[index].Length()) * timeMod;
                             }
-                            ypos = 0.5f * grav * (pz * pz - distance * pz);
+
+                            float distance = endPos.z - startPos.z;
+                            float pz = player.transform.position.z - startPos.z;
+                            if (pz > 0 && pz < distance)
+                            {
+                                float half = distance / 2;
+                                float grav = -0.25f;
+                                float halfy = 0.5f * grav * (half * half - distance * half);
+                                if (halfy > 10)
+                                {
+                                    grav = 10 / (0.5f * (half * half - distance * half));
+                                }
+                                ypos = 0.5f * grav * (pz * pz - distance * pz);
+                            }
+
                         }
 
+                        Transform cam = GameObject.Find("PlayerCam").GetComponent<PlayerCam>().orientation;
+                        float xpos = player.transform.position.x + cam.forward.x * walkSpeed * Time.deltaTime;
+                        float zpos = time * walkSpeed;
+
+                        // Get the player's bounds
+                        Bounds bounds = player.GetComponentInChildren<MeshFilter>().mesh.bounds;
+                        // Add half the player's height to the y position
+                        ypos += bounds.size.y / 2;
+
+                        player.transform.position = new Vector3(xpos, ypos, zpos);
                     }
-
-                    Transform cam = GameObject.Find("PlayerCam").GetComponent<PlayerCam>().orientation;
-                    float xpos = player.transform.position.x + cam.forward.x * walkSpeed * Time.deltaTime;
-                    float zpos = time * walkSpeed;
-                    player.transform.position = new Vector3(xpos, ypos, zpos);
-
                 }
             }
         }
@@ -152,7 +144,7 @@ public class Osu : MonoBehaviour
     GameObject ConstructPlatform(float xpos, float time)
     {
         // Create a platform
-        GameObject platform = Instantiate(platformPrefab);
+        GameObject platform = Instantiate(platformPrefab, platformParent.transform);
         float length = 10 * timeMod;
         // Get the bounds of the platform
         Bounds bounds = platform.GetComponent<MeshFilter>().mesh.bounds;
@@ -163,45 +155,15 @@ public class Osu : MonoBehaviour
         // Set the platform layer
         platform.layer = 10;
         // Set the position to the time
-        platform.transform.position = new Vector3(xpos, -bounds.size.z, time);
+        platform.transform.position = new Vector3(xpos, -0.25f, time);
         platforms.Add(platform);
-        // float length = 100 * timeMod;
-        // // Create a platform
-        // GameObject platform = Instantiate(platformPrefab);
-        // // Get the bounds of the platform
-        // Bounds bounds = platform.GetComponent<MeshFilter>().mesh.bounds;
-        // // Adjust the length of the platform to the bounds
-        // length /= bounds.size.z;
-        // // Set the platform's scale
-        // platform.transform.localScale = new Vector3(length, length, 1);
-        // // Set the platform layer
-        // platform.layer = 10;
-        // // Set the position to the time
-        // platform.transform.position = new Vector3(xpos, -bounds.size.z, time);
-        // // Add the platform to the list of platforms
-        // platforms.Add(platform);
         return platform;
     }
 
     GameObject ConstructWall(float length, float xpos, float startTime)
     {
         // Create a wall
-        // GameObject wall = Instantiate(wallPrefab);
-        // float length = hitObject.Length() * timeMod;
-        // // Get the bounds of the wall
-        // Bounds bounds = wall.GetComponent<MeshFilter>().mesh.bounds;
-        // // Adjust the length of the wall to the bounds
-        // length /= bounds.size.x;
-        // // Set the wall's scale
-        // wall.transform.localScale = new Vector3(length, 1, 1);
-        // // Set the wall layer
-        // wall.layer = 9;
-        // wall.transform.rotation = Quaternion.Euler(0, 90, 0);
-        // // Set the position to the time
-
-        // wall.transform.position = new Vector3(xpos, bounds.size.y / 4, hitObject.Time() * timeMod + length * bounds.size.x / 2);
-        // platforms.Add(wall);
-        GameObject wall = Instantiate(wallPrefab);
+        GameObject wall = Instantiate(wallPrefab, platformParent.transform);
         // Get the bounds of the platform
         Bounds bounds = wall.GetComponent<MeshFilter>().mesh.bounds;
         // Scale length to time
@@ -211,16 +173,14 @@ public class Osu : MonoBehaviour
         float endZ = startZ + length * timeMod;
         float zpos = (startZ + endZ) / 2;
         float worldWidth = endZ - startZ;
-        // Debug.Log($"Doth {endZ - startZ} ==  {length}?");
         // Set the platform's scale
         wall.transform.localScale = new Vector3(worldWidth / bounds.size.x, 1, 1);
         // Set the platform layer
         wall.layer = 9;
         // Set the platform's rotation
         wall.transform.rotation = Quaternion.Euler(0, 90, 0);
-
         // Set the position to the time
-        wall.transform.position = new Vector3(xpos, -bounds.size.y / 4, zpos);
+        wall.transform.position = new Vector3(xpos, 0.5f, zpos);
         // Add the platform to the list of platforms
         platforms.Add(wall);
         return wall;
@@ -230,7 +190,6 @@ public class Osu : MonoBehaviour
         bool wallLeft = false;
         foreach (HitObject hitObject in beatmap.HitObjects())
         {
-            // Debug.Log(hitObject.ToString());
             float xpos = Mathf.Sin(hitObject.Time() / 100.0f);
             if (hitObject.Type() == HitObjectType.CIRCLE)
             {
@@ -240,29 +199,17 @@ public class Osu : MonoBehaviour
             }
             else
             {
-                // if (hitObject.Length() < 300)
-                // {
-                //     // Create a platform
-                //     ConstructPlatform(xpos, hitObject.Time() * timeMod);
-                //     // Create a platform at the end
-                //     ConstructPlatform(xpos, (hitObject.Time() + hitObject.Length()) * timeMod);
-                // }
-                // else
+                // Create a platform
+                if (wallLeft)
                 {
-                    // Create a platform
-                    if (wallLeft)
-                    {
-                        xpos = 2.5f;
-                    }
-                    else
-                    {
-                        xpos = -2.5f;
-                    }
-                    wallLeft = !wallLeft;
-                    ConstructWall(hitObject.Length(), xpos, hitObject.Time());
+                    xpos = 2.5f;
                 }
-
-
+                else
+                {
+                    xpos = -2.5f;
+                }
+                wallLeft = !wallLeft;
+                ConstructWall(hitObject.Length(), xpos, hitObject.Time());
             }
         }
     }
@@ -528,9 +475,17 @@ class Beatmap
                     hitType = HitObjectType.SPINNER;
                     noteLength = int.Parse(args[5]) - time;
                 }
-                HitObject obj = new HitObject(x, y, hitType, time, noteLength);
-                // Debug.Log(obj.ToString());
-                hitObjects.Add(obj);
+
+                // Force short sliders to be circles
+                if (hitType != HitObjectType.CIRCLE && noteLength < 300)
+                {
+                    hitObjects.Add(new HitObject(x, y, HitObjectType.CIRCLE, time, 0));
+                    hitObjects.Add(new HitObject(x, y, HitObjectType.CIRCLE, time + noteLength, 0));
+                }
+                else
+                {
+                    hitObjects.Add(new HitObject(x, y, hitType, time, noteLength));
+                }
             }
         }
     }

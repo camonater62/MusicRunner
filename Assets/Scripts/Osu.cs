@@ -126,6 +126,7 @@ public class Osu : MonoBehaviour
 
                         Transform cam = GameObject.Find("PlayerCam").GetComponent<PlayerCam>().orientation;
                         float xpos = player.transform.position.x + cam.forward.x * walkSpeed * Time.deltaTime;
+                        xpos = Mathf.Clamp(xpos, -3, 3);
                         float zpos = time * walkSpeed;
 
                         // Get the player's bounds
@@ -187,29 +188,18 @@ public class Osu : MonoBehaviour
     }
     void GeneratePlatforms()
     {
-        bool wallLeft = false;
         foreach (HitObject hitObject in beatmap.HitObjects())
         {
             float xpos = Mathf.Sin(hitObject.Time() / 100.0f);
             if (hitObject.Type() == HitObjectType.CIRCLE)
             {
                 // Create a platform
-                ConstructPlatform(xpos, hitObject.Time() * timeMod);
-
+                ConstructPlatform(2 * xpos, hitObject.Time() * timeMod);
             }
             else
             {
                 // Create a platform
-                if (wallLeft)
-                {
-                    xpos = 2.5f;
-                }
-                else
-                {
-                    xpos = -2.5f;
-                }
-                wallLeft = !wallLeft;
-                ConstructWall(hitObject.Length(), xpos, hitObject.Time());
+                ConstructWall(hitObject.Length(), 2.5f * xpos, hitObject.Time());
             }
         }
     }
@@ -476,16 +466,7 @@ class Beatmap
                     noteLength = int.Parse(args[5]) - time;
                 }
 
-                // Force short sliders to be circles
-                if (hitType != HitObjectType.CIRCLE && noteLength < 300)
-                {
-                    hitObjects.Add(new HitObject(x, y, HitObjectType.CIRCLE, time, 0));
-                    hitObjects.Add(new HitObject(x, y, HitObjectType.CIRCLE, time + noteLength, 0));
-                }
-                else
-                {
-                    hitObjects.Add(new HitObject(x, y, hitType, time, noteLength));
-                }
+                hitObjects.Add(new HitObject(x, y, hitType, time, noteLength));
             }
         }
     }
